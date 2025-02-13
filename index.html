@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Factory Gate Entry System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        .neubrutalism {
+            border: 3px solid #000;
+            box-shadow: 5px 5px 0px #000;
+            transition: all 0.2s ease;
+        }
+        .neubrutalism:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 7px 7px 0px #000;
+        }
+        .loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+    </style>
+</head>
+<body class="bg-[#98E2C6] min-h-screen p-4">
+    <div class="loading" id="loadingScreen">
+        <div class="text-2xl font-bold">
+            <i class="bi bi-arrow-repeat animate-spin mr-2"></i>
+            Processing...
+        </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto bg-white neubrutalism p-6 rounded-lg">
+        <h1 class="text-3xl font-bold mb-6">Factory Gate Entry System</h1>
+        
+        <form id="entryForm" class="space-y-6">
+            <div class="grid md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block font-bold mb-2">Freight Order Number</label>
+                    <input type="text" required class="w-full p-3 neubrutalism" id="freightOrder">
+                </div>
+                
+                <div>
+                    <label class="block font-bold mb-2">Driver's License</label>
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png" required class="w-full p-3 neubrutalism" id="driverLicense">
+                </div>
+
+                <div>
+                    <label class="block font-bold mb-2">RC Copy</label>
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png" required class="w-full p-3 neubrutalism" id="rcCopy">
+                </div>
+
+                <div>
+                    <label class="block font-bold mb-2">PUC Copy</label>
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png" required class="w-full p-3 neubrutalism" id="pucCopy">
+                </div>
+
+                <div>
+                    <label class="block font-bold mb-2">Insurance Copy</label>
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png" required class="w-full p-3 neubrutalism" id="insuranceCopy">
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <button type="submit" class="w-full bg-[#7B66FF] text-white p-4 neubrutalism hover:bg-[#5B46DF] font-bold">
+                    Verify & Process Entry
+                </button>
+            </div>
+        </form>
+
+        <div id="status" class="mt-6 p-4 hidden">
+        </div>
+    </div>
+
+    <script>
+        const appSlug = 'gate-entry-123456';
+        const userId = 'security-guard-1';
+
+        document.getElementById('entryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const loadingScreen = document.getElementById('loadingScreen');
+            const statusDiv = document.getElementById('status');
+            
+            loadingScreen.style.display = 'flex';
+            
+            try {
+                // Upload all documents
+                const files = {
+                    driverLicense: document.getElementById('driverLicense').files[0],
+                    rcCopy: document.getElementById('rcCopy').files[0],
+                    pucCopy: document.getElementById('pucCopy').files[0],
+                    insuranceCopy: document.getElementById('insuranceCopy').files[0]
+                };
+
+                const uploadedFiles = {};
+
+                for (let [key, file] of Object.entries(files)) {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('userId', userId);
+                    formData.append('appSlug', appSlug);
+
+                    const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/storage/upload', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer 4W5lzvp0xFZCNetQCPeGrZMiqfP2'
+                        },
+                        body: formData
+                    });
+
+                    const result = await response.json();
+                    if (result.success) {
+                        uploadedFiles[key] = result.path;
+                    }
+                }
+
+                // Save entry in database
+                const entryData = {
+                    freightOrderNumber: document.getElementById('freightOrder').value,
+                    timestamp: new Date().toISOString(),
+                    documentPaths: uploadedFiles,
+                    status: 'verified', // In a real system, this would come from Vaahan portal verification
+                    verifiedBy: userId
+                };
+
+                const dbResponse = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/mongodb', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer 4W5lzvp0xFZCNetQCPeGrZMiqfP2',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        appSlug: appSlug,
+                        action: 'create',
+                        collection: 'entries',
+                        data: entryData
+                    })
+                });
+
+                const dbResult = await dbResponse.json();
+
+                if (dbResult.success) {
+                    statusDiv.innerHTML = `
+                        <div class="bg-green-100 border-2 border-green-800 text-green-800 p-4 rounded neubrutalism">
+                            <h3 class="font-bold text-xl">✅ Entry Processed Successfully</h3>
+                            <p class="mt-2">Freight Order: ${entryData.freightOrderNumber}</p>
+                            <p>All documents verified. Vehicle can proceed.</p>
+                        </div>
+                    `;
+                }
+
+                statusDiv.classList.remove('hidden');
+                document.getElementById('entryForm').reset();
+
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div class="bg-red-100 border-2 border-red-800 text-red-800 p-4 rounded neubrutalism">
+                        <h3 class="font-bold text-xl">❌ Error Processing Entry</h3>
+                        <p class="mt-2">Please try again or contact support.</p>
+                    </div>
+                `;
+                statusDiv.classList.remove('hidden');
+            } finally {
+                loadingScreen.style.display = 'none';
+            }
+        });
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
